@@ -53,11 +53,11 @@ fi
 
 
 # Get the pod name dynamically
-POD_NAME=$(oc get pods --no-headers -o custom-columns=":metadata.name" | grep common-web-ui-)
+POD_NAME=$(oc get pods --no-headers -o custom-columns=":metadata.name" | grep cpd-aux-)
 
 # Check if the pod name was found
 if [ -z "$POD_NAME" ]; then
-    echo -e "${RED}No pod found with name containing 'common-web-ui-'.${NC}"
+    echo -e "${RED}No pod found with name containing 'cpd-aux-'.${NC}"
     exit 1
 fi
 
