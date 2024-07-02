@@ -110,3 +110,25 @@ if [ $? -eq 0 ]; then
 else
     echo -e "${RED}[ERROR]There seem to be problems with recreating the .tar file.${NC}"
 fi
+
+# Copy the new tar file to the pod
+echo "Copying $NEW_TAR_FILE to the pod $CPD_AUX_POD_NAME:/data/cpd/data/exports/wkc"
+oc cp "$NEW_TAR_FILE" "$CPD_AUX_POD_NAME:/data/cpd/data/exports/wkc/"
+if [ $? -ne 0 ]; then
+    echo -e "${RED}[ERROR] Failed to copy $NEW_TAR_FILE to the pod.${NC}"
+    exit 1
+fi
+
+# Untar the copied tar file and remove the tar file inside the pod
+echo "Untarring the copied tar file inside the pod $CPD_AUX_POD_NAME"
+oc exec -it "$CPD_AUX_POD_NAME" -- bash -c "
+    cd /data/cpd/data/exports/wkc &&
+    tar -xf $NEW_TAR_FILE &&
+    rm -f $NEW_TAR_FILE
+"
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}[OK] Tar file extracted and removed successfully inside the pod${NC}"
+else
+    echo -e "${RED}[ERROR] Failed to extract and remove tar file inside the pod${NC}"
+    exit 1
+fi
