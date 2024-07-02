@@ -1,6 +1,18 @@
 #!/bin/bash
 # Developed by luigi.molinaro@ibm.com
 
+# Function to handle error messages and exit
+handle_error() {
+    local message="$1"
+    echo -e "${RED}[ERROR] $message${NC}"
+    exit 1
+}
+
+# Function to handle success messages
+handle_success() {
+    local message="$1"
+    echo -e "${GREEN}[OK] $message${NC}"
+}
 
 # Function to cleanup extracted directory
 cleanup() {
@@ -15,12 +27,12 @@ trap cleanup EXIT
 
 # Color variables
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Check if a filename is provided as a parameter
 if [ $# -eq 0 ]; then
-    echo -e "${RED}Usage: $0 <filename.tar.gz>${NC}"
-    exit 1
+    handle_error "Usage: $0 <filename.tar.gz>"
 fi
 
 # Get the filename from the first parameter
@@ -34,17 +46,15 @@ oc exec -it "$DB2_POD" -- bash -c "
     db2 update database configuration for BGDB using LOGFILSIZ 10240
 "
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}[OK] DB2 configuration updated successfully${NC}"
+    handle_success "DB2 configuration updated successfully"
 else
-    echo -e "${RED}[ERROR] Failed to update DB2 configuration${NC}"
-    exit 1
+    handle_error "Failed to update DB2 configuration"
 fi
-
 
 # Extract the contents of the .tar.gz file
 EXTRACTED_DIR=$(mktemp -d)
 echo "Extracting contents of $TAR_FILE to $EXTRACTED_DIR..."
-tar -xf "$TAR_FILE" -C "$EXTRACTED_DIR"
+tar -xf "$TAR_FILE" -C "$EXTRACTED_DIR" || handle_error "Failed to extract $TAR_FILE"
 
 # List contents of the .tar.gz file
 echo "Checking integrity of $TAR_FILE..."
@@ -54,36 +64,30 @@ TAR_LIST_RESULT=$?
 # Check for errors in nested zip files
 echo "Checking integrity of nested zip files..."
 if ! find "$EXTRACTED_DIR" -name "*.zip" -exec unzip -tq {} \;; then
-    echo -e "${RED}There are errors in nested zip files.${NC}"
-    exit 1
+    handle_error "There are errors in nested zip files."
 fi
 
 # Exit if there are errors in the tar file
 if [ $TAR_LIST_RESULT -ne 0 ]; then
-    echo -e "${RED}[ERROR] There are errors in $TAR_FILE.${NC}"
-    exit 1
+    handle_error "There are errors in $TAR_FILE."
 else
-    echo -e "${GREEN}[OK] tar file is ok${NC}"
+    handle_success "tar file is ok"
 fi
-
 
 # Get the pod name of the IMPORT POD dynamically
 CPD_AUX_POD_NAME=$(oc get pods --no-headers -o custom-columns=":metadata.name" | grep cpd-aux-)
 
 # Check if the pod name was found
 if [ -z "$CPD_AUX_POD_NAME" ]; then
-    echo -e "${RED}[ERROR] No pod found with name containing 'cpd-aux-'.${NC}"
-    exit 1
+    handle_error "No pod found with name containing 'cpd-aux-'."
 fi
 
 echo "Found pod: $CPD_AUX_POD_NAME"
 
 # Get uid, gid and groups from the pod
 USER_INFO=$(oc rsh "$CPD_AUX_POD_NAME" id)
-
 if [ $? -ne 0 ]; then
-    echo -e "${RED}[ERROR] Failed to retrieve user information from the pod.${NC}"
-    exit 1
+    handle_error "Failed to retrieve user information from the pod."
 fi
 
 echo "Retrieved ID from pod= $USER_INFO"
@@ -96,28 +100,18 @@ echo "Retrieved user info: uid=$USER_UID, groups=$USER_GROUPS"
 
 # Set the permissions of the extracted files
 echo "Setting permissions of the extracted files..."
-chown -R "$USER_UID:$USER_GROUPS" "$EXTRACTED_DIR"
+chown -R "$USER_UID:$USER_GROUPS" "$EXTRACTED_DIR" || handle_error "Failed to set permissions on extracted files."
 
 # Recreate the .tar file without compression with new permissions
 echo "Recreating $TAR_FILE without compression with new permissions..."
 NEW_TAR_FILE="${TAR_FILE%%.*}.tar"
-tar -cf "$NEW_TAR_FILE" -C "$EXTRACTED_DIR" .
+tar -cf "$NEW_TAR_FILE" -C "$EXTRACTED_DIR" . || handle_error "There seem to be problems with recreating the .tar file."
 
-# Check the result of the tar operation
-if [ $? -eq 0 ]; then
-    echo "New .tar file created: $NEW_TAR_FILE"
-    echo -e "${GREEN}[OK] New tar ricreated with right permission${NC}"
-else
-    echo -e "${RED}[ERROR]There seem to be problems with recreating the .tar file.${NC}"
-fi
+handle_success "New tar created with correct permissions"
 
 # Copy the new tar file to the pod
 echo "Copying $NEW_TAR_FILE to the pod $CPD_AUX_POD_NAME:/data/cpd/data/exports/wkc"
-oc cp "$NEW_TAR_FILE" "$CPD_AUX_POD_NAME:/data/cpd/data/exports/wkc/"
-if [ $? -ne 0 ]; then
-    echo -e "${RED}[ERROR] Failed to copy $NEW_TAR_FILE to the pod.${NC}"
-    exit 1
-fi
+oc cp "$NEW_TAR_FILE" "$CPD_AUX_POD_NAME:/data/cpd/data/exports/wkc/" || handle_error "Failed to copy $NEW_TAR_FILE to the pod."
 
 # Untar the copied tar file and remove the tar file inside the pod
 echo "Untarring the copied tar file inside the pod $CPD_AUX_POD_NAME"
@@ -127,8 +121,7 @@ oc exec -it "$CPD_AUX_POD_NAME" -- bash -c "
     rm -f $NEW_TAR_FILE
 "
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}[OK] Tar file extracted and removed successfully inside the pod${NC}"
+    handle_success "Tar file extracted and removed successfully inside the pod"
 else
-    echo -e "${RED}[ERROR] Failed to extract and remove tar file inside the pod${NC}"
-    exit 1
+    handle_error "Failed to extract and remove tar file inside the pod"
 fi
