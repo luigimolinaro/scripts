@@ -26,6 +26,21 @@ fi
 # Get the filename from the first parameter
 TAR_FILE="$1"
 
+# Execute the additional DB2 configuration commands in the specific pod
+DB2_POD="c-db2oltp-wkc-db2u-0"
+echo "Executing DB2 configuration commands in pod: $DB2_POD"
+oc exec -it "$DB2_POD" -- bash -c "
+    db2 update database configuration for BGDB using LOGSECOND 128 &&
+    db2 update database configuration for BGDB using LOGFILSIZ 10240
+"
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}[OK] DB2 configuration updated successfully${NC}"
+else
+    echo -e "${RED}[ERROR] Failed to update DB2 configuration${NC}"
+    exit 1
+fi
+
+
 # Extract the contents of the .tar.gz file
 EXTRACTED_DIR=$(mktemp -d)
 echo "Extracting contents of $TAR_FILE to $EXTRACTED_DIR..."
@@ -52,22 +67,22 @@ else
 fi
 
 
-# Get the pod name dynamically
-POD_NAME=$(oc get pods --no-headers -o custom-columns=":metadata.name" | grep cpd-aux-)
+# Get the pod name of the IMPORT POD dynamically
+CPD_AUX_POD_NAME=$(oc get pods --no-headers -o custom-columns=":metadata.name" | grep cpd-aux-)
 
 # Check if the pod name was found
-if [ -z "$POD_NAME" ]; then
-    echo -e "${RED}No pod found with name containing 'cpd-aux-'.${NC}"
+if [ -z "$CPD_AUX_POD_NAME" ]; then
+    echo -e "${RED}[ERROR] No pod found with name containing 'cpd-aux-'.${NC}"
     exit 1
 fi
 
-echo "Found pod: $POD_NAME"
+echo "Found pod: $CPD_AUX_POD_NAME"
 
 # Get uid, gid and groups from the pod
-USER_INFO=$(oc rsh "$POD_NAME" id)
+USER_INFO=$(oc rsh "$CPD_AUX_POD_NAME" id)
 
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Failed to retrieve user information from the pod.${NC}"
+    echo -e "${RED}[ERROR] Failed to retrieve user information from the pod.${NC}"
     exit 1
 fi
 
