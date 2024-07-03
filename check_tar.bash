@@ -105,7 +105,7 @@ chown -R "$USER_UID:$USER_GROUPS" "$EXTRACTED_DIR" || handle_error "Failed to se
 # Recreate the .tar file without compression with new permissions
 echo "Recreating $TAR_FILE without compression with new permissions..."
 NEW_TAR_FILE="${TAR_FILE%%.*}.tar"
-tar -cf "$NEW_TAR_FILE" -C "$EXTRACTED_DIR" . || handle_error "There seem to be problems with recreating the .tar file."
+tar -cf "$NEW_TAR_FILE" -C "$EXTRACTED_DIR"  || handle_error "There seem to be problems with recreating the .tar file."
 
 handle_success "New tar created with correct permissions"
 
